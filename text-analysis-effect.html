@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Text Morphing Analysis Effect</title>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #e0e0e0;
+            font-family: 'Courier New', Courier, monospace;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .phone-screen {
+            width: 375px;
+            max-width: 100%;
+            height: 812px;
+            max-height: 90vh;
+            background-color: #d8dce0;
+            border-radius: 40px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            padding: 20px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .status-bar {
+            font-size: 14px;
+            color: #333;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 15px;
+            height: 40px;
+            margin-bottom: 10px;
+        }
+
+        .status-icons {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .content-area {
+            flex-grow: 1;
+            padding: 20px;
+            color: #333;
+            font-size: 15px;
+            line-height: 1.6;
+            position: relative;
+        }
+
+        .content-area p {
+            margin-bottom: 1em;
+        }
+
+        .content-area.invisible {
+            visibility: hidden;
+        }
+
+        /* Temporary class for measurement */
+        .char-span {
+            display: inline;
+            position: relative;
+        }
+
+        #analyseButton {
+            padding: 12px 20px;
+            border: 1px solid #aaa;
+            background-color: #e8e8e8;
+            color: #333;
+            border-radius: 8px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 16px;
+            width: calc(100% - 40px);
+            margin: 0 auto 20px auto;
+            position: absolute;
+            bottom: 30px;
+            left: 20px;
+            transition: all 0.3s ease;
+        }
+
+        #analyseButton:hover {
+            background-color: #ddd;
+        }
+
+        #analyseButton.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        #morphCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .highlight {
+            background-color: yellow;
+            padding: 2px 0;
+            border-radius: 2px;
+            animation: highlightFade 0.5s ease;
+        }
+
+        @keyframes highlightFade {
+            from {
+                background-color: #ffff99;
+            }
+            to {
+                background-color: yellow;
+            }
+        }
+
+        /* Battery icon */
+        .battery {
+            width: 24px;
+            height: 12px;
+            border: 1px solid #333;
+            border-radius: 2px;
+            position: relative;
+            background: linear-gradient(to right, #333 75%, transparent 75%);
+        }
+
+        .battery::after {
+            content: '';
+            position: absolute;
+            right: -3px;
+            top: 3px;
+            width: 2px;
+            height: 6px;
+            background-color: #333;
+            border-radius: 0 1px 1px 0;
+        }
+
+        /* WiFi icon */
+        .wifi {
+            width: 16px;
+            height: 16px;
+            position: relative;
+        }
+
+        .wifi::before,
+        .wifi::after,
+        .wifi span {
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            border: 2px solid #333;
+            border-bottom: none;
+            border-radius: 100px 100px 0 0;
+        }
+
+        .wifi::before {
+            width: 16px;
+            height: 8px;
+            top: 0;
+        }
+
+        .wifi::after {
+            width: 10px;
+            height: 5px;
+            top: 5px;
+        }
+
+        .wifi span {
+            width: 4px;
+            height: 2px;
+            top: 10px;
+            background-color: #333;
+            border: none;
+            border-radius: 50%;
+        }
+    </style>
+</head>
+<body>
+    <div class="phone-screen">
+        <div class="status-bar">
+            <span>3:47</span>
+            <div class="status-icons">
+                <div class="wifi"><span></span></div>
+                <div class="battery"></div>
+            </div>
+        </div>
+
+        <div id="textContent" class="content-area">
+            <p>Note to self.</p>
+            <p>As the tech world hustles to offload intelligence and decision making, dedicate more time to craft, precision, and choice.</p>
+            <p>When the time from idea to production shrinks, the need for tasteful execution becomes essential - and for many - the only differentiating factor.</p>
+            <p>Tech isn't hard anymore, crafting an experience around it is. Nurture the intangible, stay a thinker, not a keyboard-presser.</p>
+            <p>&lt;3</p>
+        </div>
+
+        <canvas id="morphCanvas"></canvas>
+
+        <button id="analyseButton">Analyse</button>
+    </div>
+
+    <script>
+        const textContentDiv = document.getElementById('textContent');
+        const analyseButton = document.getElementById('analyseButton');
+        const canvas = document.getElementById('morphCanvas');
+        const ctx = canvas.getContext('2d');
+        const originalHTML = textContentDiv.innerHTML;
+
+        let animationFrameId;
+        let particles = [];
+        let animationPhase = 'idle';
+        let animationStartTime = 0;
+        let isAnalysing = false;
+        let textHidden = false;
+
+        const PHASE_DURATIONS = {
+            chaos: 800,
+            forming: 1200,
+            sphere: 2000,
+            returning: 1000
+        };
+
+        function setupCanvas() {
+            const phoneRect = document.querySelector('.phone-screen').getBoundingClientRect();
+            const dpr = window.devicePixelRatio || 1;
+            
+            canvas.width = phoneRect.width * dpr;
+            canvas.height = phoneRect.height * dpr;
+            canvas.style.width = phoneRect.width + 'px';
+            canvas.style.height = phoneRect.height + 'px';
+            ctx.scale(dpr, dpr);
+            ctx.font = '15px "Courier New", monospace';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+        }
+
+        function measureCharacterPositions() {
+            const characters = [];
+            const phoneRect = document.querySelector('.phone-screen').getBoundingClientRect();
+            const paragraphs = textContentDiv.querySelectorAll('p');
+            
+            paragraphs.forEach((p, pIndex) => {
+                const text = p.textContent;
+                
+                // Temporarily replace paragraph content with spans
+                const spans = [];
+                for (let i = 0; i < text.length; i++) {
+                    const span = document.createElement('span');
+                    span.className = 'char-span';
+                    span.textContent = text[i];
+                    spans.push(span);
+                }
+                
+                // Store original content
+                const originalContent = p.innerHTML;
+                
+                // Replace with spans
+                p.innerHTML = '';
+                spans.forEach(span => p.appendChild(span));
+                
+                // Measure each span
+                spans.forEach((span, i) => {
+                    const rect = span.getBoundingClientRect();
+                    characters.push({
+                        char: text[i],
+                        x: rect.left + rect.width / 2 - phoneRect.left,
+                        y: rect.top + rect.height / 2 - phoneRect.top,
+                        isSpace: text[i] === ' ',
+                        paragraphIndex: pIndex
+                    });
+                });
+                
+                // Restore original content
+                p.innerHTML = originalContent;
+            });
+            
+            return characters;
+        }
+
+        function initParticles() {
+            particles = [];
+            const characters = measureCharacterPositions();
+            const sphereRadius = 80;
+            const phoneRect = document.querySelector('.phone-screen').getBoundingClientRect();
+            const centerX = phoneRect.width / 2;
+            const centerY = phoneRect.height / 2;
+            
+            let visibleCharIndex = 0;
+            characters.forEach((charData, i) => {
+                // For sphere distribution, only count non-space characters
+                if (!charData.isSpace) {
+                    const ratio = visibleCharIndex / characters.filter(c => !c.isSpace).length;
+                    const phi = Math.acos(1 - 2 * ratio);
+                    const theta = Math.PI * (1 + Math.sqrt(5)) * visibleCharIndex;
+                    
+                    particles.push({
+                        char: charData.char,
+                        originalX: charData.x,
+                        originalY: charData.y,
+                        currentX: charData.x,
+                        currentY: charData.y,
+                        chaosX: charData.x + (Math.random() - 0.5) * 40,
+                        chaosY: charData.y + (Math.random() - 0.5) * 40,
+                        sphereX: sphereRadius * Math.sin(phi) * Math.cos(theta),
+                        sphereY: sphereRadius * Math.sin(phi) * Math.sin(theta),
+                        sphereZ: sphereRadius * Math.cos(phi),
+                        rotation: 0,
+                        chaosRotation: (Math.random() - 0.5) * Math.PI * 0.5,
+                        rotationSpeed: (Math.random() - 0.5) * 0.05,
+                        opacity: 1,
+                        fontSize: 15,
+                        isSpace: false
+                    });
+                    
+                    visibleCharIndex++;
+                }
+            });
+        }
+
+        function easeInOutCubic(t) {
+            return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+        }
+
+        function lerp(start, end, t) {
+            return start + (end - start) * t;
+        }
+
+        function updateParticles() {
+            const elapsed = Date.now() - animationStartTime;
+            const phoneRect = document.querySelector('.phone-screen').getBoundingClientRect();
+            const centerX = phoneRect.width / 2;
+            const centerY = phoneRect.height / 2;
+            
+            switch (animationPhase) {
+                case 'chaos':
+                    const chaosProgress = Math.min(elapsed / PHASE_DURATIONS.chaos, 1);
+                    
+                    // Hide text after initial particles are drawn
+                    if (!textHidden && chaosProgress > 0.02) {
+                        textContentDiv.classList.add('invisible');
+                        textHidden = true;
+                    }
+                    
+                    particles.forEach(p => {
+                        p.currentX = lerp(p.originalX, p.chaosX, easeInOutCubic(chaosProgress));
+                        p.currentY = lerp(p.originalY, p.chaosY, easeInOutCubic(chaosProgress));
+                        p.rotation = lerp(0, p.chaosRotation, chaosProgress);
+                        // Slight opacity reduction during chaos
+                        p.opacity = lerp(1, 0.85, chaosProgress * 0.5);
+                    });
+                    
+                    if (chaosProgress >= 1) {
+                        animationPhase = 'forming';
+                        animationStartTime = Date.now();
+                    }
+                    break;
+                    
+                case 'forming':
+                    const formingProgress = Math.min(elapsed / PHASE_DURATIONS.forming, 1);
+                    particles.forEach(p => {
+                        const targetX = centerX + p.sphereX;
+                        const targetY = centerY + p.sphereY;
+                        
+                        p.currentX = lerp(p.chaosX, targetX, easeInOutCubic(formingProgress));
+                        p.currentY = lerp(p.chaosY, targetY, easeInOutCubic(formingProgress));
+                        p.rotation += p.rotationSpeed;
+                        // Restore opacity
+                        p.opacity = lerp(0.85, 1, formingProgress);
+                    });
+                    
+                    if (formingProgress >= 1) {
+                        animationPhase = 'sphere';
+                        animationStartTime = Date.now();
+                    }
+                    break;
+                    
+                case 'sphere':
+                    const angleX = 0.002;
+                    const angleY = 0.003;
+                    
+                    particles.forEach(p => {
+                        // Rotate around Y axis
+                        let x = p.sphereX;
+                        let z = p.sphereZ;
+                        p.sphereX = x * Math.cos(angleY) - z * Math.sin(angleY);
+                        p.sphereZ = x * Math.sin(angleY) + z * Math.cos(angleY);
+                        
+                        // Rotate around X axis
+                        let y = p.sphereY;
+                        z = p.sphereZ;
+                        p.sphereY = y * Math.cos(angleX) - z * Math.sin(angleX);
+                        p.sphereZ = y * Math.sin(angleX) + z * Math.cos(angleX);
+                        
+                        p.currentX = centerX + p.sphereX;
+                        p.currentY = centerY + p.sphereY;
+                        p.rotation += p.rotationSpeed;
+                        
+                        // Depth-based opacity
+                        const perspective = 200 / (200 + p.sphereZ);
+                        p.opacity = Math.max(0.3, Math.min(1, perspective));
+                    });
+                    
+                    if (elapsed >= PHASE_DURATIONS.sphere) {
+                        animationPhase = 'returning';
+                        animationStartTime = Date.now();
+                    }
+                    break;
+                    
+                case 'returning':
+                    const returnProgress = Math.min(elapsed / PHASE_DURATIONS.returning, 1);
+                    particles.forEach(p => {
+                        p.currentX = lerp(centerX + p.sphereX, p.originalX, easeInOutCubic(returnProgress));
+                        p.currentY = lerp(centerY + p.sphereY, p.originalY, easeInOutCubic(returnProgress));
+                        p.rotation = lerp(p.rotation, 0, returnProgress);
+                        p.opacity = lerp(p.opacity, 1, returnProgress);
+                    });
+                    
+                    if (returnProgress >= 1) {
+                        animationPhase = 'complete';
+                        setTimeout(() => {
+                            stopAnimation();
+                            applyHighlights();
+                        }, 100);
+                    }
+                    break;
+            }
+        }
+
+        function drawParticles() {
+            const phoneRect = document.querySelector('.phone-screen').getBoundingClientRect();
+            ctx.clearRect(0, 0, phoneRect.width, phoneRect.height);
+            ctx.fillStyle = '#333';
+            
+            // Sort by Z for proper depth rendering during sphere phases
+            if (animationPhase === 'sphere' || animationPhase === 'forming') {
+                particles.sort((a, b) => (b.sphereZ || 0) - (a.sphereZ || 0));
+            }
+            
+            particles.forEach(p => {
+                ctx.save();
+                ctx.globalAlpha = p.opacity;
+                ctx.translate(p.currentX, p.currentY);
+                ctx.rotate(p.rotation);
+                ctx.fillText(p.char, 0, 0);
+                ctx.restore();
+            });
+        }
+
+        function animate() {
+            updateParticles();
+            drawParticles();
+            animationFrameId = requestAnimationFrame(animate);
+        }
+
+        function startAnimation() {
+            setupCanvas();
+            initParticles();
+            
+            animationPhase = 'chaos';
+            animationStartTime = Date.now();
+            textHidden = false;
+            
+            // Draw initial frame with particles at text positions
+            drawParticles();
+            
+            // Start animation on next frame
+            requestAnimationFrame(() => {
+                animate();
+            });
+        }
+
+        function stopAnimation() {
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+                animationFrameId = null;
+            }
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            textContentDiv.classList.remove('invisible');
+            textHidden = false;
+            animationPhase = 'idle';
+        }
+
+        function applyHighlights() {
+            let newHTML = originalHTML;
+            const highlights = [
+                "world hustles",
+                "dedicate more time",
+                "tasteful execution",
+                "Nurture the intangible"
+            ];
+
+            highlights.forEach(phrase => {
+                const regex = new RegExp(`(${phrase})`, 'gi');
+                newHTML = newHTML.replace(regex, `<span class="highlight">$1</span>`);
+            });
+            textContentDiv.innerHTML = newHTML;
+            isAnalysing = false;
+            analyseButton.classList.remove('hidden');
+        }
+
+        analyseButton.addEventListener('click', () => {
+            if (isAnalysing) return;
+            
+            isAnalysing = true;
+            analyseButton.classList.add('hidden');
+            startAnimation();
+        });
+
+        window.addEventListener('resize', () => {
+            if (animationPhase !== 'idle' && animationPhase !== 'complete') {
+                setupCanvas();
+            }
+        });
+    </script>
+</body>
+</html>
