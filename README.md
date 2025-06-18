@@ -20,7 +20,7 @@ A text animation effect where text breaks apart into a 3D sphere of characters, 
 
 ## Usage
 
-Simply open `index.html` in a modern web browser. Click "Analyse" to start the effect.
+Simply open `text-analysis-effect.html` in a modern web browser. Click "Analyse" to start the effect.
 
 ## Customization
 
