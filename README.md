@@ -33,5 +33,6 @@ You can customize:
 ## Inspiration
 
 https://x.com/k_wagner/status/1935066225073328190
+
 Based on the concept of text "thinking" - a visual metaphor for AI processing.
 
